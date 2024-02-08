@@ -1,9 +1,12 @@
-import cv2
-import sounddevice as sd
-import speech_recognition as sr
-import wave
-import os
-import threading
+# Import the OpenCV library for computer vision tasks
+import cv2  # OpenCV (Open Source Computer Vision) is a library for computer vision and machine learning
+
+# Import necessary libraries for voice recognition
+import sounddevice as sd  # Library for audio playback and recording
+import speech_recognition as sr  # Library for speech recognition
+import wave  # Library for handling WAV files
+import os  # Library for interacting with the operating system
+import threading # Library for multi-threading
 
 # Load the pre-trained face recognition model
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
@@ -20,11 +23,13 @@ recognizer = sr.Recognizer()
 # Global flag to control the threads
 exit_flag = False
 
+# Function to record audio using sounddevice
 def record_audio(duration=5):
     audio_data = sd.rec(int(duration * 44100), channels=1, dtype='int16')
     sd.wait()
     return audio_data
 
+# Function to write audio data to a WAV file
 def write_wav(filename, audio_data, sample_rate=44100):
     with wave.open(filename, 'wb') as wf:
         wf.setnchannels(1)
@@ -32,6 +37,7 @@ def write_wav(filename, audio_data, sample_rate=44100):
         wf.setframerate(sample_rate)
         wf.writeframes(audio_data.tobytes())
 
+# Face recognition thread
 def face_recognition_thread():
     global exit_flag
     while not exit_flag:
@@ -53,11 +59,12 @@ def face_recognition_thread():
             exit_flag = True
             break
 
+# Audio processing thread
 def audio_processing_thread():
     global exit_flag
     while not exit_flag:
         try:
-            print("Say 'Clock In' to mark attendance (or 'Stop' to exit):")
+            print("Say 'Clock In' or 'Clock Out' to mark attendance (or 'Stop' to exit):")
             
             audio_data = record_audio()
             write_wav('temp.wav', audio_data)
@@ -70,7 +77,10 @@ def audio_processing_thread():
 
                     if "clock in" in text:
                         print("Clock In - Attendance Marked!")
-                        # Add additional logic here if needed
+                        # Add logic for clocking in here
+                    elif "clock out" in text:
+                        print("Clock Out - Attendance Marked!")
+                        # Add logic for clocking out here
                     elif "stop" in text:
                         print("Recording stopped.")
                         exit_flag = True
