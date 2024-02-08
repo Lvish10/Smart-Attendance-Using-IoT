@@ -1,0 +1,106 @@
+import cv2
+import sounddevice as sd
+import speech_recognition as sr
+import wave
+import os
+import threading
+
+# Load the pre-trained face recognition model
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+# Initialize the webcam with lower resolution and frame rate
+cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+cap.set(cv2.CAP_PROP_FPS, 15)  # Lower frame rate
+
+# Create a speech recognizer instance
+recognizer = sr.Recognizer()
+
+# Global flag to control the threads
+exit_flag = False
+
+def record_audio(duration=5):
+    audio_data = sd.rec(int(duration * 44100), channels=1, dtype='int16')
+    sd.wait()
+    return audio_data
+
+def write_wav(filename, audio_data, sample_rate=44100):
+    with wave.open(filename, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(audio_data.tobytes())
+
+def face_recognition_thread():
+    global exit_flag
+    while not exit_flag:
+        ret, frame = cap.read()
+        if not ret:
+            print("Error: Unable to capture frame.")
+            break
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+
+        for (x, y, w, h) in faces:
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+
+        frame = cv2.flip(frame, 1)
+        cv2.imshow('Face Recognition', frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            exit_flag = True
+            break
+
+def audio_processing_thread():
+    global exit_flag
+    while not exit_flag:
+        try:
+            print("Say 'Clock In' to mark attendance (or 'Stop' to exit):")
+            
+            audio_data = record_audio()
+            write_wav('temp.wav', audio_data)
+
+            with sr.AudioFile('temp.wav') as f:
+                audio = recognizer.record(f)
+
+                try:
+                    text = recognizer.recognize_google(audio).lower()
+
+                    if "clock in" in text:
+                        print("Clock In - Attendance Marked!")
+                        # Add additional logic here if needed
+                    elif "stop" in text:
+                        print("Recording stopped.")
+                        exit_flag = True
+
+                except sr.UnknownValueError:
+                    print("Could not understand audio.")
+                except sr.RequestError as e:
+                    print(f"Error with the recognition service; {e}")
+
+            os.remove('temp.wav')
+
+        except KeyboardInterrupt:
+            print("Recording stopped.")
+            exit_flag = True
+            break
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+# Start face recognition thread
+face_thread = threading.Thread(target=face_recognition_thread)
+face_thread.start()
+
+# Start audio processing thread
+audio_thread = threading.Thread(target=audio_processing_thread)
+audio_thread.start()
+
+# Wait for threads to finish
+face_thread.join()
+audio_thread.join()
+
+# Release the webcam and close all windows
+cap.release()
+cv2.destroyAllWindows()
