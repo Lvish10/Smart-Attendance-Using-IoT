@@ -1,0 +1,19 @@
+1. **Face Recognition Script (OpenCV):**
+   - **Script Name:** `face_recognition.py`
+   - **Description:** This script uses the OpenCV library for face recognition. It captures video from the webcam, detects faces using the Haar Cascade classifier, and marks them with rectangles.
+   - **Dependencies:** OpenCV (`opencv-python`)
+
+2. **Voice Recognition Script (SpeechRecognition and PyAudio):**
+   - **Script Name:** `voice_recognition.py`
+   - **Description:** This script utilizes SpeechRecognition and PyAudio to perform voice recognition. It records audio from the default microphone, saves it as a temporary WAV file, and uses Google Speech Recognition to transcribe speech.
+   - **Dependencies:** SpeechRecognition (`SpeechRecognition`), PyAudio (`sounddevice`)
+
+3. **Combined Script (Face and Voice Recognition):**
+   - **Script Name:** `smart_attendance_system.py`
+   - **Description:** This script combines face and voice recognition to create a Smart Attendance System. It uses OpenCV for face recognition and SpeechRecognition with PyAudio for voice recognition. The system marks attendance when it recognizes the command "Clock In."
+   - **Dependencies:** OpenCV (`opencv-python`), SpeechRecognition (`SpeechRecognition`), PyAudio (`sounddevice`)
+
+4. **Additional Utility Script (Optional - for audio recording and processing):**
+   - **Script Name:** `audio_utils.py`
+   - **Description:** This script may contain helper functions for audio recording and processing, depending on project requirements.
+   - **Dependencies:** PyAudio (`sounddevice`), Wave (`wave`)
