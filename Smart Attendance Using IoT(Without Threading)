@@ -69,8 +69,8 @@ while True:
         # Display the resulting frame
         cv2.imshow('Face Recognition', frame)
 
-        # Say 'Clock In' to mark attendance (or 'Stop' to exit)
-        print("Say 'Clock In' to mark attendance (or 'Stop' to exit):")
+        # Say 'Clock In' or 'Clock Out' to mark attendance (or 'Stop' to exit)
+        print("Say 'Clock In' or 'Clock Out' to mark attendance (or 'Stop' to exit):")
 
         # Record audio until 'Stop' is said
         audio_data = record_audio()
@@ -84,7 +84,10 @@ while True:
 
                 if "clock in" in text:
                     print("Clock In - Attendance Marked!")
-                    # Add additional logic here if needed
+                    # Add logic for clocking in here
+                elif "clock out" in text:
+                    print("Clock Out - Attendance Marked!")
+                    # Add logic for clocking out here
                 elif "stop" in text:
                     print("Recording stopped.")
                     break  # Exit the loop
