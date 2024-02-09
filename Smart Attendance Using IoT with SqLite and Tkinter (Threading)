@@ -1,0 +1,292 @@
+from PIL import Image, ImageTk
+import tkinter as tk
+from tkinter import ttk, messagebox
+import sqlite3
+import sounddevice as sd
+import speech_recognition as sr
+import wave
+import os
+import threading
+import cv2
+
+# Load the pre-trained face recognition model
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+# Initialize the webcam with lower resolution and frame rate
+cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+cap.set(cv2.CAP_PROP_FPS, 15)  # Lower frame rate
+
+# Create a speech recognizer instance
+recognizer = sr.Recognizer()
+
+# Global flag to control the threads
+exit_flag = threading.Event()
+
+# Function to record audio using sounddevice
+def record_audio(duration=5):
+    audio_data = sd.rec(int(duration * 44100), channels=1, dtype='int16')
+    sd.wait()
+    return audio_data
+
+# Function to write audio data to a WAV file
+def write_wav(filename, audio_data, sample_rate=44100):
+    with wave.open(filename, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(audio_data.tobytes())
+
+class DatabaseOutputApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Attendance Database Viewer")
+
+        # Create a Treeview widget to display the database content
+        self.tree = ttk.Treeview(self.root, columns=("ID", "Date", "Time", "Person ID", "Status"), show="headings", height=15)
+
+        # Define column headings
+        self.tree.heading("ID", text="ID")
+        self.tree.heading("Date", text="Date")
+        self.tree.heading("Time", text="Time")
+        self.tree.heading("Person ID", text="Person ID")
+        self.tree.heading("Status", text="Status")
+
+        # Define column widths
+        self.tree.column("ID", width=50)
+        self.tree.column("Date", width=100)
+        self.tree.column("Time", width=100)
+        self.tree.column("Person ID", width=100)
+        self.tree.column("Status", width=100)
+
+        # Apply a modern theme to the Treeview
+        style = ttk.Style()
+        style.theme_use("clam")
+
+        # Pack the Treeview
+        self.tree.pack(expand=True, fill="both")
+
+        # Populate Treeview with data from the database
+        self.populate_treeview()
+
+    def populate_treeview(self):
+        try:
+            # Connect to SQLite database
+            db_file = 'attendance.db'
+            conn = sqlite3.connect(db_file)
+            cursor = conn.cursor()
+
+            # Fetch data from the database
+            cursor.execute("SELECT * FROM attendance")
+            data = cursor.fetchall()
+
+            # Insert data into the Treeview
+            for row in data:
+                self.tree.insert("", "end", values=row)
+
+            # Close the SQLite connection
+            conn.close()
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"Error accessing the database: {e}")
+
+class WebcamThread(threading.Thread):
+    def __init__(self, app):
+        threading.Thread.__init__(self)
+        self.app = app
+
+    def run(self):
+        while not exit_flag.is_set():
+            ret, frame = cap.read()
+
+            if ret:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+
+                for (x, y, w, h) in faces:
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+
+                frame = cv2.flip(frame, 1)
+
+                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(img)
+                img = ImageTk.PhotoImage(img)
+
+                self.app.video_label.img = img
+                self.app.video_label.config(image=img)
+                self.app.root.update()  # Update the Tkinter window
+
+                exit_flag.wait(0.01)  # Introduce a small delay to avoid busy-waiting
+
+class AttendanceApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Attendance System")
+
+        # Initialize OpenCV components
+        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        self.cap = cv2.VideoCapture(0)
+        self.recording = False
+
+        # Create UI elements
+        self.create_widgets()
+
+        # Start the webcam update thread
+        self.webcam_thread = WebcamThread(self)
+
+    def create_widgets(self):
+        # Video feed label
+        self.video_label = tk.Label(self.root, background='black')
+        self.video_label.pack(padx=10, pady=10)
+
+        # Start and Stop buttons
+        self.start_button = ttk.Button(self.root, text="Start", command=self.start_recording)
+        self.start_button.pack(pady=5, padx=20)
+
+        self.stop_button = ttk.Button(self.root, text="Stop", command=self.stop_recording, state=tk.DISABLED)
+        self.stop_button.pack(pady=5, padx=20)
+
+        # View Attendance button
+        self.view_attendance_button = ttk.Button(self.root, text="View Attendance", command=self.view_attendance)
+        self.view_attendance_button.pack(pady=5, padx=20)
+
+        # Status label
+        self.status_label = ttk.Label(self.root, text="Status: Idle")
+        self.status_label.pack(pady=5, padx=20)
+
+    def start_recording(self):
+        self.recording = True
+        self.start_button["state"] = tk.DISABLED
+        self.stop_button["state"] = tk.NORMAL
+        self.update_status("Recording Started")
+
+        # Start the webcam update thread
+        self.webcam_thread.start()
+
+        # Create threads for database operations and audio processing
+        db_thread = threading.Thread(target=self.database_thread)
+        audio_thread = threading.Thread(target=self.audio_processing_thread)
+
+        # Start all threads
+        db_thread.start()
+        audio_thread.start()
+
+    def stop_recording(self):
+        self.recording = False
+        self.start_button["state"] = tk.NORMAL
+        self.stop_button["state"] = tk.DISABLED
+        self.update_status("Recording Stopped")
+
+        # Set the exit flag to stop the webcam thread
+        exit_flag.set()
+        self.webcam_thread.join()  # Wait for the webcam thread to finish
+
+    def view_attendance(self):
+        # Open the DatabaseOutputApp window for viewing attendance information
+        root_db = tk.Toplevel(self.root)
+        app_db = DatabaseOutputApp(root_db)
+
+    def update_status(self, message):
+        # Update the status label
+        self.status_label["text"] = f"Status: {message}"
+
+    def database_thread(self):
+        try:
+            # Connect to SQLite database
+            db_file = 'attendance.db'
+            conn = sqlite3.connect(db_file)
+            cursor = conn.cursor()
+
+            # Create a table for attendance if not exists
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS attendance (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT,
+                    time TEXT,
+                    person_id TEXT,
+                    status TEXT
+                )
+            ''')
+            conn.commit()
+
+            while self.recording and not exit_flag.is_set():
+                # Simulate a database operation by printing a message
+                print("Database thread: Performing database operation")
+
+                # Sleep for a while to simulate processing time
+                exit_flag.wait(5)  # Sleep for 5 seconds (adjust as needed)
+
+        except Exception as e:
+            print(f"Database thread: An error occurred: {e}")
+        finally:
+            # Close the SQLite connection
+            conn.close()
+
+    def audio_processing_thread(self):
+        try:
+            # Connect to SQLite database
+            db_file = 'attendance.db'
+            conn = sqlite3.connect(db_file)
+            cursor = conn.cursor()
+
+            # Create a table for attendance if not exists
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS attendance (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT,
+                    time TEXT,
+                    person_id TEXT,
+                    status TEXT
+                )
+            ''')
+            conn.commit()
+
+            while self.recording and not exit_flag.is_set():
+                print("Say 'Clock In', 'Clock Out', or 'Stop' to exit:")
+
+                audio_data = record_audio()
+                write_wav('temp.wav', audio_data)
+
+                with sr.AudioFile('temp.wav') as f:
+                    audio = recognizer.record(f)
+
+                    try:
+                        text = recognizer.recognize_google(audio).lower()
+                        print("Recognized Text:", text)
+
+                        if "clock in" in text or "clock out" in text:
+                            person_id = input("Enter person's ID: ")
+                            status = "Clock In" if "clock in" in text else "Clock Out"
+                            print(f"{status} - Attendance Marked for person with ID {person_id}!")
+
+                            # Store attendance information in the database
+                            cursor.execute("INSERT INTO attendance (date, time, person_id, status) VALUES (date('now'), time('now', 'localtime'), ?, ?)", (person_id, status))
+                            conn.commit()
+
+                        elif "stop" in text:
+                            print("Recording stopped.")
+                            self.recording = False
+
+                    except sr.UnknownValueError:
+                        print("Could not understand audio.")
+                    except sr.RequestError as e:
+                        print(f"Error with the recognition service; {e}")
+
+                os.remove('temp.wav')
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+        finally:
+            # Close the SQLite connection
+            conn.close()
+
+# Main program
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = AttendanceApp(root)
+    root.mainloop()
+
+    # Release the webcam and close all windows
+    cap.release()
+    cv2.destroyAllWindows()
