@@ -50,6 +50,3 @@ The Smart Attendance System is an innovative project that combines the power of 
 **Note:**
 Adjust the parameters and configurations based on your system requirements. Experiment with different setups and optimizations to tailor the Smart Attendance System to your specific needs.
 
----
-
-Feel free to customize the description based on your project's unique features and goals.
