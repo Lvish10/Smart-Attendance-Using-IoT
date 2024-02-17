@@ -1,0 +1,84 @@
+# Import necessary libraries
+import sounddevice as sd
+import speech_recognition as sr
+import wave
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Create a speech recognizer instance
+recognizer = sr.Recognizer()
+
+# Delete the temporary WAV file if it exists
+temp_wav_file = 'temp.wav'
+if os.path.exists(temp_wav_file):
+    os.remove(temp_wav_file)
+
+# Function to record audio using sounddevice
+def record_audio(duration=5):
+    audio_data = sd.rec(int(duration * 44100), channels=1, dtype='int16')
+    sd.wait()
+    return audio_data
+
+# Function to write audio data to a WAV file
+def write_wav(filename, audio_data, sample_rate=44100):
+    with wave.open(filename, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(audio_data.tobytes())
+
+# Function to perform FFT analysis and plot the spectrum
+def plot_spectrum(audio_data, sample_rate=44100):
+    N = len(audio_data)
+    frequencies = np.fft.fftfreq(N, d=1/sample_rate)
+    spectrum = np.abs(np.fft.fft(audio_data))
+    
+    plt.figure()
+    plt.plot(frequencies[:N//2], spectrum[:N//2])
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Magnitude')
+    plt.title('Frequency Spectrum')
+    plt.show()
+
+# Main loop for continuous operation
+while True:
+    try:
+        print("Say 'login' to mark attendance (or 'Stop' to exit):")
+
+        # Record audio until 'Stop' is said
+        audio_data = record_audio()
+        write_wav(temp_wav_file, audio_data)
+
+        # Perform FFT analysis and plot the spectrum
+        plot_spectrum(audio_data)
+
+        with sr.AudioFile(temp_wav_file) as f:
+            audio = recognizer.record(f)
+
+            try:
+                text = recognizer.recognize_google(audio).lower()
+                print("Recognized Text:", text)
+
+                if "login" in text:
+                    print("login - Attendance Marked!")
+                    # Add additional logic here if needed
+                elif "stop" in text:
+                    print("Recording stopped.")
+                    break  # Exit the loop
+
+            except sr.UnknownValueError:
+                print("Could not understand audio.")
+            except sr.RequestError as e:
+                print(f"Error with the recognition service; {e}")
+
+    except KeyboardInterrupt:
+        # Allow the user to exit the loop using Ctrl+C
+        print("Recording stopped.")
+        break
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+# Delete the temporary WAV file at the end
+if os.path.exists(temp_wav_file):
+    os.remove(temp_wav_file)
