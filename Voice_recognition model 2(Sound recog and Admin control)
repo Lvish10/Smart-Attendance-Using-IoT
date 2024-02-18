@@ -325,6 +325,7 @@ while True:
     except KeyboardInterrupt:
         # Allow the user to exit the loop using Ctrl+C
         print("Recording stopped.")
+
         break
     except Exception as e:
         print(f"An error occurred: {e}")
