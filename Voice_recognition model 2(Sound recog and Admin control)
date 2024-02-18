@@ -82,22 +82,20 @@ def authenticate_admin():
     return entered_pin == admin_pin
 
 # Function to remove a user
-def remove_user(model, user_id):
-    if hasattr(model, 'classes_') and user_id in model.classes_:
-        # Remove the user ID from classes
-        classes = getattr(model, 'classes_', [])
-        classes.remove(user_id)
-        setattr(model, 'classes_', classes)
+def remove_user(user_id):
+    user_folder = os.path.join(user_data_folder, user_id)
+    if os.path.exists(user_folder):
+        # Remove the user ID from model classes
+        if hasattr(model, 'classes_') and user_id in model.classes_:
+            classes = getattr(model, 'classes_', [])
+            classes.remove(user_id)
+            setattr(model, 'classes_', classes)
 
         # Remove the user's folder
-        user_folder = os.path.join(user_data_folder, user_id)
-        if os.path.exists(user_folder):
-            shutil.rmtree(user_folder)
-            print(f"User {user_id} removed.")
-        else:
-            print(f"User {user_id} data not found.")
+        shutil.rmtree(user_folder)
+        print(f"User {user_id} removed.")
     else:
-        print(f"User {user_id} not found in enrolled users.")
+        print(f"User {user_id} data not found.")
 
 # Function to view user FFT files
 def view_user_fft(user_id):
@@ -121,6 +119,13 @@ def view_user_fft(user_id):
     else:
         print(f"User {user_id} data not found.")
 
+# Function to verify if user data is recorded
+def verify_user_data(user_id):
+    user_folder = os.path.join(user_data_folder, user_id)
+    if os.path.exists(user_folder):
+        print(f"User {user_id} data is recorded.")
+    else:
+        print(f"User {user_id} data is not recorded.")
 
 # Function to enroll a user's voice
 def enroll_user(model):
@@ -164,17 +169,6 @@ def enroll_user(model):
         model.fit(mfcc_features.reshape(1, -1), [user_id])
 
     print(f"Enrollment for User ID: {user_id} completed. User data saved in {user_data_file}.")
-
-    # Add the new user ID to classes and train the model (fit) with the user data
-    if hasattr(model, 'classes_'):
-        classes = getattr(model, 'classes_', [])
-        classes = np.concatenate([classes, [user_id]])
-        setattr(model, 'classes_', classes)
-        model.fit(mfcc_features.reshape(1, -1), [user_id])
-    else:
-        # Train the model (fit) with the user data
-        model = RandomForestClassifier(n_estimators=100)
-        model.fit(mfcc_features.reshape(1, -1), [user_id])
 
 # Function for user login
 def login_user(model):
@@ -222,7 +216,6 @@ def login_user(model):
     else:
         print("Login failed. Voice not recognized.")
 
-
 # Function for user logout
 def logout_user(model):
     print("Logging out...")
@@ -269,7 +262,6 @@ def logout_user(model):
     else:
         print("Logout failed. Voice not recognized.")
 
-
 # Function for administrative actions
 def admin_actions():
     while True:
@@ -278,26 +270,29 @@ def admin_actions():
             print("1. Enroll new user")
             print("2. Remove user")
             print("3. View user FFT files")
-            print("4. Exit")
+            print("4. Verify user data")
+            print("5. Exit")
 
-            choice = input("Enter your choice (1, 2, 3, or 4): ")
+            choice = input("Enter your choice (1, 2, 3, 4, or 5): ")
 
             if choice == "1":
                 enroll_user(model)
             elif choice == "2":
                 user_id = input("Enter the ID of the user to remove: ")
-                remove_user(model, user_id)
+                remove_user(user_id)
             elif choice == "3":
                 user_id = input("Enter the ID of the user to view FFT files: ")
                 view_user_fft(user_id)
             elif choice == "4":
+                user_id = input("Enter the ID of the user to verify data: ")
+                verify_user_data(user_id)
+            elif choice == "5":
                 print("Exiting admin panel.")
                 break
             else:
-                print("Invalid choice. Please enter 1, 2, 3, or 4.")
+                print("Invalid choice. Please enter 1, 2, 3, 4, or 5.")
         else:
             print("Authentication failed. Invalid PIN.")
-
 
 # Main loop for continuous operation
 while True:
@@ -325,7 +320,6 @@ while True:
     except KeyboardInterrupt:
         # Allow the user to exit the loop using Ctrl+C
         print("Recording stopped.")
-
         break
     except Exception as e:
         print(f"An error occurred: {e}")
