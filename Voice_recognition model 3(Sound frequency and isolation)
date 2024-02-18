@@ -1,0 +1,244 @@
+import sounddevice as sd
+import os
+import numpy as np
+import pickle
+import wave
+import matplotlib.pyplot as plt
+import speech_recognition as sr
+from sklearn.ensemble import RandomForestClassifier
+from python_speech_features import mfcc
+from scipy.fftpack import fft
+
+# Create a speech recognizer instance
+recognizer = sr.Recognizer()
+
+# Initialize the model
+model = RandomForestClassifier(n_estimators=100)
+
+# Admin PIN for authentication
+admin_pin = "1234"  # Change this to your desired PIN
+
+# Function to record audio using sounddevice
+def record_audio(duration=5):
+    audio_data = sd.rec(int(duration * 44100), channels=1, dtype='int16')
+    sd.wait()
+    return audio_data
+
+# Function to write audio data to a WAV file
+def write_wav(filename, audio_data, sample_rate=44100):
+    with wave.open(filename, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(audio_data.tobytes())
+
+# Function to perform FFT analysis and plot the spectrum
+def plot_spectrum(audio_data, sample_rate=44100):
+    N = len(audio_data)
+    frequencies = np.fft.fftfreq(N, d=1/sample_rate)
+    spectrum = np.abs(fft(audio_data))
+    
+    plt.figure()
+    plt.plot(frequencies[:N//2], spectrum[:N//2])
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Magnitude')
+    plt.title('Frequency Spectrum')
+    plt.show()
+
+# Function to perform MFCC analysis
+def mfcc_analysis(audio_data, sample_rate=44100):
+    return mfcc(audio_data.flatten(), samplerate=sample_rate, winlen=0.025, winstep=0.01, numcep=13, nfilt=26, nfft=2048)
+
+# Function to perform voice recognition
+def recognize_voice():
+    print("Please say your command.")
+    with sr.Microphone() as source:
+        try:
+            audio_data = recognizer.listen(source, timeout=5)
+            text = recognizer.recognize_google(audio_data)
+            print(f"Recognized: {text}")
+            return text.lower()
+        except sr.UnknownValueError:
+            print("Voice not recognized.")
+            return None
+
+# Function to authenticate admin with PIN
+def authenticate_admin():
+    print("Enter the admin PIN:")
+    entered_pin = input()
+    return entered_pin == admin_pin
+
+# Function to enroll a user's voice
+def enroll_user(name, model):
+    print(f"Enrolling user: {name}")
+
+    # Record audio for enrollment
+    audio_data = record_audio()
+
+    # Perform FFT analysis and plot the spectrum
+    plot_spectrum(audio_data)
+
+    # Perform MFCC analysis for voice recognition
+    mfcc_features = mfcc_analysis(audio_data)
+
+    # Train the model (fit) if not already trained
+    if not hasattr(model, 'classes_'):
+        print("Training the model...")
+        # Initialize classes with any existing user IDs
+        classes = getattr(model, 'classes_', [])
+
+        # Reshape the mfcc features to 2D array
+        mfcc_features = mfcc_features.reshape(mfcc_features.shape[0], -1)
+
+        model.fit(mfcc_features, classes)
+        print("Model trained.")
+
+    # Predict using the trained model
+    user_id = model.predict(mfcc_features)[0]
+
+    # Create a folder for user data if it doesn't exist
+    user_folder = f'user_data/{user_id}'
+    os.makedirs(user_folder, exist_ok=True)
+
+    # Save user data (ID, name, voice recording, FFT, octave)
+    with open(f'{user_folder}/user_data.pkl', 'wb') as data_file:
+        user_data = {
+            'id': user_id,
+            'name': name,
+            'voice_recording': audio_data,
+            'mfcc_features': mfcc_features,
+            'fft': np.abs(fft(audio_data)),
+            'octave': mfcc_features.mean(axis=0)
+        }
+        pickle.dump(user_data, data_file)
+
+    # Add the new user ID to classes
+    classes.append(user_id)
+    setattr(model, 'classes_', classes)
+
+    print(f"Enrollment for {name} (ID: {user_id}) completed.")
+
+# Function for user login
+def login_user(model):
+    print("Logging in...")
+
+    # Record audio for login
+    audio_data = record_audio()
+
+    # Perform FFT analysis and plot the spectrum
+    plot_spectrum(audio_data)
+
+    # Perform voice recognition
+    recognized_name = recognize_voice()
+
+    if recognized_name:
+        # Extract MFCC features for voice recognition
+        mfcc_features = mfcc_analysis(audio_data)
+
+        # Train the model (fit) if not already trained
+        if not hasattr(model, 'classes_'):
+            print("Training the model...")
+            # Initialize classes with any existing user IDs
+            classes = getattr(model, 'classes_', [])
+
+            # Reshape the mfcc features to 2D array
+            mfcc_features = mfcc_features.reshape(mfcc_features.shape[0], -1)
+
+            model.fit(mfcc_features, classes)
+            print("Model trained.")
+
+        # Predict using the trained model
+        user_id = model.predict(mfcc_features)[0]
+
+        print(f"Welcome back! User ID: {user_id}")
+    else:
+        print("Login failed. Voice not recognized.")
+
+# Function for user logout
+def logout_user(model):
+    print("Logging out...")
+
+    # Record audio for logout
+    audio_data = record_audio()
+
+    # Perform FFT analysis and plot the spectrum
+    plot_spectrum(audio_data)
+
+    # Perform voice recognition
+    recognized_name = recognize_voice()
+
+    if recognized_name:
+        # Extract MFCC features for voice recognition
+        mfcc_features = mfcc_analysis(audio_data)
+
+        # Train the model (fit) if not already trained
+        if not hasattr(model, 'classes_'):
+            print("Training the model...")
+            # Initialize classes with any existing user IDs
+            classes = getattr(model, 'classes_', [])
+
+            # Reshape the mfcc features to 2D array
+            mfcc_features = mfcc_features.reshape(mfcc_features.shape[0], -1)
+
+            model.fit(mfcc_features, classes)
+            print("Model trained.")
+
+        # Predict using the trained model
+        user_id = model.predict(mfcc_features)[0]
+
+        print(f"Goodbye! User ID: {user_id}")
+    else:
+        print("Logout failed. Voice not recognized.")
+
+# Function for administrative actions
+def admin_actions():
+    print("Administrator actions:")
+    print("1. Enroll new user")
+    print("2. View user data")
+    print("3. Exit")
+    
+    choice = input("Enter your choice (1, 2, or 3): ")
+
+    if choice == "1":
+        if authenticate_admin():
+            name = input("Enter the name of the user: ")
+            enroll_user(name, model)
+        else:
+            print("Authentication failed. Invalid PIN.")
+    elif choice == "2":
+        # Implement view user data functionality here
+        pass
+    elif choice == "3":
+        print("Exiting admin panel.")
+    else:
+        print("Invalid choice. Please enter 1, 2, or 3.")
+
+# Main loop for continuous operation
+while True:
+    try:
+        print("Listening for a command...")
+
+        # Use 'login', 'enroll', 'logout', 'admin', or 'stop' as voice commands
+        command = recognize_voice()
+
+        if command and command.lower() == 'enroll':
+            name = input("Enter the name of the user: ")
+            enroll_user(name, model)
+        elif command and command.lower() == 'login':
+            login_user(model)
+        elif command and command.lower() == 'logout':
+            logout_user(model)
+        elif command and command.lower() == 'admin':
+            admin_actions()
+        elif command and command.lower() == 'stop':
+            print("Recording stopped.")
+            break
+        else:
+            print("Invalid command or not recognized. Please try again.")
+
+    except KeyboardInterrupt:
+        # Allow the user to exit the loop using Ctrl+C
+        print("Recording stopped.")
+        break
+    except Exception as e:
+        print(f"An error occurred: {e}")
